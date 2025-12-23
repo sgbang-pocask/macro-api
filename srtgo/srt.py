@@ -548,11 +548,19 @@ class NetFunnelHelper:
             return self._cached_key
 
         try:
+            start_time = time.time()
+            max_wait_time = 30  # Maximum 30 seconds wait
+
             status, self._cached_key, nwait, ip = self._start()
             self._last_fetch_time = current_time
 
             # Keep checking until we get a pass status
             while status == self.WAIT_STATUS_FAIL:
+                # Check timeout
+                if time.time() - start_time > max_wait_time:
+                    self.clear()
+                    raise SRTNetFunnelError(f"NetFunnel timeout after {max_wait_time}s")
+
                 print(f"\r현재 {nwait}명 대기중...", end="", flush=True)
                 # Call the callback with waiting status
                 if self.on_wait_callback:
@@ -592,7 +600,7 @@ class NetFunnelHelper:
     def _make_request(self, opcode: str, ip: Optional[str] = None):
         url = f"https://{ip or 'nf.letskorail.com'}/ts.wseq"
         params = self._build_params(self.OP_CODE[opcode])
-        r = self._session.get(url, params=params, verify=False)
+        r = self._session.get(url, params=params, verify=False, timeout=10)
         if self.debug:
             print(r.text)
         response = self._parse(r.text)
@@ -720,7 +728,7 @@ class SRT:
             "hmpgPwdCphd": srt_pw,
         }
 
-        r = self._session.post(url=API_ENDPOINTS["login"], data=data)
+        r = self._session.post(url=API_ENDPOINTS["login"], data=data, timeout=10)
         self._log(r.text)
 
         if "존재하지않는 회원입니다" in r.text:
@@ -753,7 +761,7 @@ class SRT:
         if not self.is_login:
             return True
 
-        r = self._session.post(url=API_ENDPOINTS["logout"])
+        r = self._session.post(url=API_ENDPOINTS["logout"], timeout=10)
         self._log(r.text)
 
         if not r.ok:
@@ -830,7 +838,7 @@ class SRT:
             "netfunnelKey": self._netfunnel.run(),
         }
 
-        r = self._session.post(url=API_ENDPOINTS["search_schedule"], data=data)
+        r = self._session.post(url=API_ENDPOINTS["search_schedule"], data=data, timeout=10)
         self._log(r.text)
         parser = SRTResponseData(r.text)
 
@@ -1007,7 +1015,7 @@ class SRT:
             )
         )
 
-        r = self._session.post(url=API_ENDPOINTS["reserve"], data=data)
+        r = self._session.post(url=API_ENDPOINTS["reserve"], data=data, timeout=10)
         self._log(r.text)
         parser = SRTResponseData(r.text)
 
@@ -1057,7 +1065,7 @@ class SRT:
             "telNo": telNo if isAgreeSMS else "",
         }
 
-        r = self._session.post(url=API_ENDPOINTS["standby_option"], data=data)
+        r = self._session.post(url=API_ENDPOINTS["standby_option"], data=data, timeout=10)
         self._log(r.text)
         return r.status_code == 200
 
@@ -1077,7 +1085,7 @@ class SRT:
         if not self.is_login:
             raise SRTNotLoggedInError()
 
-        r = self._session.post(url=API_ENDPOINTS["tickets"], data={"pageNo": "0"})
+        r = self._session.post(url=API_ENDPOINTS["tickets"], data={"pageNo": "0"}, timeout=10)
         self._log(r.text)
         parser = SRTResponseData(r.text)
 
@@ -1113,6 +1121,7 @@ class SRT:
         r = self._session.post(
             url=API_ENDPOINTS["ticket_info"],
             data={"pnrNo": reservation_number, "jrnySqno": "1"},
+            timeout=10,
         )
         self._log(r.text)
         parser = SRTResponseData(r.text)
@@ -1148,7 +1157,7 @@ class SRT:
 
         data = {"pnrNo": reservation_number, "jrnyCnt": "1", "rsvChgTno": "0"}
 
-        r = self._session.post(url=API_ENDPOINTS["cancel"], data=data)
+        r = self._session.post(url=API_ENDPOINTS["cancel"], data=data, timeout=10)
         self._log(r.text)
         parser = SRTResponseData(r.text)
 
@@ -1226,7 +1235,7 @@ class SRT:
             "pageUrl": "",
         }
 
-        r = self._session.post(url=API_ENDPOINTS["payment"], data=data)
+        r = self._session.post(url=API_ENDPOINTS["payment"], data=data, timeout=10)
         self._log(r.text)
         response = json.loads(r.text)
 
@@ -1238,7 +1247,7 @@ class SRT:
     def reserve_info(self, reservation: SRTReservation | int) -> bool:
         referer = API_ENDPOINTS["reserve_info_referer"] + reservation.reservation_number
         self._session.headers.update({"Referer": referer})
-        r = self._session.post(url=API_ENDPOINTS["reserve_info"])
+        r = self._session.post(url=API_ENDPOINTS["reserve_info"], timeout=10)
         self._log(r.text)
         response = json.loads(r.text)
         if response.get("ErrorCode") == "0" and response.get("ErrorMsg") == "":
@@ -1258,7 +1267,7 @@ class SRT:
             "psgNm": info.get("buyPsNm"),
         }
 
-        r = self._session.post(url=API_ENDPOINTS["refund"], data=data)
+        r = self._session.post(url=API_ENDPOINTS["refund"], data=data, timeout=10)
         self._log(r.text)
         response = SRTResponseData(r.text)
 
